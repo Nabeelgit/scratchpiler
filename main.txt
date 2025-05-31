@@ -1,1 +1,2 @@
-int i = 1
+string hi = "hello"
+print(hi)

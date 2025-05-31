@@ -18,6 +18,11 @@ Takes in file named "main.txt" which should be in the same folder as this
 */
 
 
+std::unordered_map<std::string, int> int_vars;
+std::unordered_map<std::string, std::string> string_vars;
+std::unordered_map<std::string, float> float_vars;
+std::unordered_map<std::string, long> long_vars;
+
 std::vector<std::string> split(const std::string& s, const std::string& delimiter) {
         std::vector<std::string> tokens;
         size_t pos = 0;
@@ -71,6 +76,15 @@ bool valueInString(std::string str, char val){
     return false;
 }
 
+std::string isVar(std::string varName) {
+    if (int_vars.find(varName) != int_vars.end()) return "int";
+    if (string_vars.find(varName) != string_vars.end()) return "string";
+    if (float_vars.find(varName) != float_vars.end()) return "float";
+    if (long_vars.find(varName) != long_vars.end()) return "long";
+
+    return "null";
+}
+
 int main(){
     std::ifstream file("main.txt");
 
@@ -80,10 +94,6 @@ int main(){
     if (file.is_open()) {
         std::string line;
         int line_number = 1;
-        std::unordered_map<std::string, int> int_vars;
-        std::unordered_map<std::string, std::string> string_vars;
-        std::unordered_map<std::string, float> float_vars;
-        std::unordered_map<std::string, long> long_vars;
         while (getline(file, line)) {
             line = trim(line);
             // find variables if any in line
@@ -156,13 +166,39 @@ int main(){
                 left_paren_split[0] != line && 
                 right_paren_split[0] != line && 
                 left_paren_split.back().back() == ')' && 
-                right_paren_split[0].back() == '('
+                split(right_paren_split[0], left_paren_split[0])[1][0] == '('
             )
             {
                 std::string func_name = left_paren_split[0];
                 int func_val_in_arr = valueInArray(funcs, sizeof(funcs)/sizeof(funcs[0]), func_name);
                 if(func_val_in_arr > -1){
-                    
+                   if(func_name == "print"){
+                    left_paren_split[1].pop_back();
+                    std::string inside_func = left_paren_split[1];
+                    if ((inside_func[0] == '"' && inside_func.back() != '"') || (inside_func.back() == '"' && inside_func[0] != '"')){
+                        std::cout << "Missing double quote inside print " << " on line " << line_number << std::endl;
+                        return 0;
+                    } else if(inside_func[0] == '"' && inside_func.back() == '"'){
+                        inside_func.erase(0, 1);
+                        inside_func.pop_back();
+                        std::cout << inside_func;
+                    } else {
+                        // variable
+                        std::string var_val = isVar(inside_func);
+                        if (var_val == "null") {
+                            std::cout << "Unknown variable in print on line " << line_number << std::endl;
+                            return 0;
+                        } else if (var_val == "string") {
+                            std::cout << string_vars[inside_func];
+                        } else if (var_val == "int") {
+                            std::cout << int_vars[inside_func];
+                        } else if (var_val == "float") {
+                            std::cout << float_vars[inside_func];
+                        } else if (var_val == "long") {
+                            std::cout << long_vars[inside_func];
+                        }
+                    }
+                   }
                 }
             }
             line_number++;
