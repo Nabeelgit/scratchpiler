@@ -7,6 +7,10 @@
 #include <unordered_map>
 #include <stdexcept>
 #include <cctype>
+#include <regex>
+#include <stack>
+#include <cmath>
+#include <sstream>
 
 /*
 Compiler was written with no knowledge of actual compilers...
@@ -16,6 +20,89 @@ Programming language name = Scratchpiler ;-)
 
 Takes in file named "main.txt" which should be in the same folder as this
 */
+
+double evaluateExpression(const std::string& expr) {
+    // Tokenize the input
+    std::vector<std::string> tokens;
+    std::string num;
+    for (size_t i = 0; i < expr.size(); ++i) {
+        char c = expr[i];
+        if (isspace(c)) continue;
+        if (isdigit(c) || c == '.') {
+            num += c;
+        } else {
+            if (!num.empty()) {
+                tokens.push_back(num);
+                num.clear();
+            }
+            if (std::string("+-*/%^()").find(c) != std::string::npos)
+                tokens.emplace_back(1, c);
+        }
+    }
+    if (!num.empty()) tokens.push_back(num);
+
+    // Convert infix to postfix
+    std::vector<std::string> output;
+    std::stack<char> ops;
+
+    auto precedence = [](char op) {
+        if (op == '^') return 3;
+        if (op == '*' || op == '/' || op == '%') return 2;
+        if (op == '+' || op == '-') return 1;
+        return 0;
+    };
+    auto isRightAssociative = [](char op) {
+        return op == '^';
+    };
+    for (const auto& token : tokens) {
+        if (isdigit(token[0]) || (token.size() > 1 && isdigit(token[1]))) {
+            output.push_back(token);
+        } else if (token == "(") {
+            ops.push('(');
+        } else if (token == ")") {
+            while (!ops.empty() && ops.top() != '(') {
+                output.emplace_back(1, ops.top());
+                ops.pop();
+            }
+            if (!ops.empty()) ops.pop();  // remove '('
+        } else {
+            char op = token[0];
+            while (!ops.empty() && (
+                (precedence(ops.top()) > precedence(op)) ||
+                (precedence(ops.top()) == precedence(op) && !isRightAssociative(op))
+            ) && ops.top() != '(') {
+                output.emplace_back(1, ops.top());
+                ops.pop();
+            }
+            ops.push(op);
+        }
+    }
+    while (!ops.empty()) {
+        output.emplace_back(1, ops.top());
+        ops.pop();
+    }
+
+    // Evaluate postfix
+    std::stack<double> eval;
+    for (const auto& token : output) {
+        if (isdigit(token[0]) || (token.size() > 1 && (isdigit(token[1]) || token[1] == '.'))) {
+            eval.push(std::stod(token));
+        } else {
+            double b = eval.top(); eval.pop();
+            double a = eval.top(); eval.pop();
+            switch (token[0]) {
+                case '+': eval.push(a + b); break;
+                case '-': eval.push(a - b); break;
+                case '*': eval.push(a * b); break;
+                case '/': eval.push(a / b); break;
+                case '%': eval.push(fmod(a, b)); break;
+                case '^': eval.push(pow(a, b)); break;
+            }
+        }
+    }
+
+    return eval.top();
+}
 
 
 std::unordered_map<std::string, int> int_vars;
@@ -85,6 +172,47 @@ std::string isVar(std::string varName) {
     return "null";
 }
 
+bool isMathExpression(const std::string& input) {
+    // Reject quoted strings
+    if (input.front() == '"' && input.back() == '"') {
+        return false;
+    }
+
+    // Match patterns like: 5+2, a + b * 3 - 1
+    std::regex pattern(R"(^\s*[\w]+(\s*[\+\-\*/%]\s*[\w]+)+\s*$)");
+
+    return std::regex_match(input, pattern);
+}
+
+std::string joinVectorElements(const std::vector<std::string>& vec, int start, int end) {
+    if (start < 0) start = 0;
+    if (end > vec.size()) end = vec.size();
+    std::string result;
+    for (int i = start; i < end; ++i) {
+        result += vec[i];
+    }
+    return result;
+}
+
+std::string char_to_string(char c){
+    std::string s(1, c);
+    return s;
+}
+
+double handleMath(std::string eq){
+    std::string symbols[5] = {"+", "-", "/", "*", "%"};
+    std::vector<char> eq_splitted;
+    for(int i = 0; i < eq.size(); i++){
+        eq_splitted.push_back(eq[i]);
+    }
+    std::string new_eq = "";
+    for(int k = 0; k < eq_splitted.size(); k++){
+        if(valueInArray(symbols, sizeof(symbols)/sizeof(symbols[0]), char_to_string(eq_splitted[k]))){
+            //for(int j = 0; j < k)
+        }
+    }
+}
+
 int main(){
     std::ifstream file("main.txt");
 
@@ -105,26 +233,39 @@ int main(){
                     std::cout << "Variable type declared but value not declared with = on line " << line_number << std::endl;
                     return 0;
                 }
-                if (size < 4){
-                    std::cout << "Unexpected variable decleration on line " << line_number << std::endl;
-                }
                 std::string variable_name = splitted_line[1];
+                std::string joinedVarVal = joinVectorElements(splitted_line, 3, size);
+                if (size < 4){
+                    std::cout << "Unexpected variable declaration on line " << line_number << std::endl;
+                }
                 if (var_val == 0 || var_val == 2 || var_val == 3){
-                    // int
+                    // number
+                    if(valueInString(splitted_line[3], '"')){
+                        std::cout << "Double quotes found in number declaration on line " << line_number << std::endl;
+                        return 0;
+                    }
+                    std::cout << '"' << joinedVarVal << '"' << "\n";
+                    if(isMathExpression(joinedVarVal)){
+
+                        splitted_line[3] = std::to_string(evaluateExpression(joinedVarVal));
+                    }
                     if(size > 4){
-                        std::cout << "Number decleration error on line " << line_number << std::endl;
+                        std::cout << "Number declaration error on line " << line_number << std::endl;
                         return 0;
                     }
                     try {
                         if (var_val == 0){
+                            // int
                             int_vars[variable_name] = stoi(splitted_line[3]);
                         } else if (var_val == 2){
+                            //float
                             if(split(splitted_line[3], ".").size() > 1){
                                 std::cout << "Float declared with multiple decimal points on line " << line_number << std::endl;
                                 return 0;
                             }
                             float_vars[variable_name] = std::stof(splitted_line[3]);
                         } else if (var_val == 3){
+                            //long
                             if(split(splitted_line[3], ".").size() > 1){
                                 std::cout << "Long declared with multiple decimal points on line " << line_number << std::endl;
                                 return 0;

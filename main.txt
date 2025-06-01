@@ -1,2 +1,2 @@
-string hi = "hello"
+int hi = 1 + 1
 print(hi)
