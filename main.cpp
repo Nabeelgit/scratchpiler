@@ -13,8 +13,8 @@
 #include <sstream>
 
 /*
-Compiler was written with no knowledge of actual compilers...
-How I would make a compiler. NO VIBE CODING, NO SEARCHING GOOGLE (or any search engine) FOR COMPLETE PROJECT
+Programming language was written with no knowledge of actual programming languages...
+How I would make a programming language. NO VIBE CODING, NO SEARCHING GOOGLE (or any search engine) FOR COMPLETE PROJECT
 
 Programming language name = Scratchpiler ;-)
 
@@ -22,13 +22,13 @@ Takes in file named "main.txt" which should be in the same folder as this
 */
 
 double evaluateExpression(const std::string& expr) {
-    // Tokenize the input
+    // Tokenize input
     std::vector<std::string> tokens;
     std::string num;
     for (size_t i = 0; i < expr.size(); ++i) {
         char c = expr[i];
         if (isspace(c)) continue;
-        if (isdigit(c) || c == '.') {
+        if (isdigit(c) || c == '.' || (c == '-' && (i == 0 || expr[i - 1] == '(' || std::string("+-*/%^").find(expr[i - 1]) != std::string::npos))) {
             num += c;
         } else {
             if (!num.empty()) {
@@ -41,7 +41,7 @@ double evaluateExpression(const std::string& expr) {
     }
     if (!num.empty()) tokens.push_back(num);
 
-    // Convert infix to postfix
+    // Infix to postfix
     std::vector<std::string> output;
     std::stack<char> ops;
 
@@ -54,8 +54,9 @@ double evaluateExpression(const std::string& expr) {
     auto isRightAssociative = [](char op) {
         return op == '^';
     };
+
     for (const auto& token : tokens) {
-        if (isdigit(token[0]) || (token.size() > 1 && isdigit(token[1]))) {
+        if (isdigit(token[0]) || (token[0] == '-' && token.size() > 1 && (isdigit(token[1]) || token[1] == '.'))) {
             output.push_back(token);
         } else if (token == "(") {
             ops.push('(');
@@ -85,7 +86,7 @@ double evaluateExpression(const std::string& expr) {
     // Evaluate postfix
     std::stack<double> eval;
     for (const auto& token : output) {
-        if (isdigit(token[0]) || (token.size() > 1 && (isdigit(token[1]) || token[1] == '.'))) {
+        if (isdigit(token[0]) || (token[0] == '-' && token.size() > 1)) {
             eval.push(std::stod(token));
         } else {
             double b = eval.top(); eval.pop();
@@ -100,7 +101,6 @@ double evaluateExpression(const std::string& expr) {
             }
         }
     }
-
     return eval.top();
 }
 
@@ -178,8 +178,8 @@ bool isMathExpression(const std::string& input) {
         return false;
     }
 
-    // Match patterns like: 5+2, a + b * 3 - 1
-    std::regex pattern(R"(^\s*[\w]+(\s*[\+\-\*/%]\s*[\w]+)+\s*$)");
+    // Match math-like expressions with variables/numbers and + - * / %
+    std::regex pattern(R"(^\s*[\w]+(\s*[-+\*/%]\s*[\w]+)+\s*$)");
 
     return std::regex_match(input, pattern);
 }
@@ -199,19 +199,60 @@ std::string char_to_string(char c){
     return s;
 }
 
-double handleMath(std::string eq){
-    std::string symbols[5] = {"+", "-", "/", "*", "%"};
-    std::vector<char> eq_splitted;
-    for(int i = 0; i < eq.size(); i++){
-        eq_splitted.push_back(eq[i]);
-    }
-    std::string new_eq = "";
-    for(int k = 0; k < eq_splitted.size(); k++){
-        if(valueInArray(symbols, sizeof(symbols)/sizeof(symbols[0]), char_to_string(eq_splitted[k]))){
-            //for(int j = 0; j < k)
+double handleMath(const std::string& expr){
+    std::vector<std::string> tokens;
+    std::string current;
+    bool lastWasOperator = true;  // Assume start is like after an operator
+
+    for (size_t i = 0; i < expr.length(); ++i) {
+        char c = expr[i];
+
+        if (std::isspace(c)) continue;
+
+        if (std::isdigit(c) || c == '.') {
+            current += c;
+            lastWasOperator = false;
+        }
+        else if (std::isalpha(c)) {
+            current += c;
+            lastWasOperator = false;
+        }
+        else if (c == '-' && lastWasOperator) {
+            // Negative number or variable like -x
+            current += c;
+        }
+        else if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '^') {
+            if (!current.empty()) {
+                tokens.push_back(current);
+                current.clear();
+            }
+            tokens.emplace_back(1, c);
+            lastWasOperator = true;
+        }
+        else {
+            std::cout << "Unknown character in equation\n";
+            exit(0);
         }
     }
+
+    if (!current.empty()) {
+        tokens.push_back(current);
+    }
+    // go through vector and check for variables if variable then replace it with its value
+    for(int i = 0; i < tokens.size(); i++){
+        if(int_vars.count(tokens[i]) > 0){
+            tokens[i] = std::to_string(int_vars[tokens[i]]);
+        } else if(float_vars.count(tokens[i]) > 0){
+            tokens[i] = std::to_string(float_vars[tokens[i]]);
+        } else if(long_vars.count(tokens[i]) > 0){
+            tokens[i] = std::to_string(long_vars[tokens[i]]);
+        }
+    }
+    std::string new_str = joinVectorElements(tokens, 0, tokens.size());
+    return evaluateExpression(new_str);
 }
+
+
 
 int main(){
     std::ifstream file("main.txt");
@@ -234,6 +275,21 @@ int main(){
                     return 0;
                 }
                 std::string variable_name = splitted_line[1];
+                try {
+                    std::stoi(variable_name);
+                    std::cout << "Invalid variable name on line " << line_number << std::endl;
+                    return 0;
+                }  catch (const std::invalid_argument& e) {} catch (const std::out_of_range& e) {}
+                try {
+                    std::stof(variable_name);
+                    std::cout << "Invalid variable name on line " << line_number << std::endl;
+                    return 0;
+                }  catch (const std::invalid_argument& e) {} catch (const std::out_of_range& e) {}
+                try {
+                    std::stol(variable_name);
+                    std::cout << "Invalid variable name on line " << line_number << std::endl;
+                    return 0;
+                }  catch (const std::invalid_argument& e) {} catch (const std::out_of_range& e) {}
                 std::string joinedVarVal = joinVectorElements(splitted_line, 3, size);
                 if (size < 4){
                     std::cout << "Unexpected variable declaration on line " << line_number << std::endl;
@@ -244,12 +300,10 @@ int main(){
                         std::cout << "Double quotes found in number declaration on line " << line_number << std::endl;
                         return 0;
                     }
-                    std::cout << '"' << joinedVarVal << '"' << "\n";
                     if(isMathExpression(joinedVarVal)){
-
-                        splitted_line[3] = std::to_string(evaluateExpression(joinedVarVal));
+                        splitted_line[3] = std::to_string(handleMath(joinedVarVal));
                     }
-                    if(size > 4){
+                    else if(size > 4){
                         std::cout << "Number declaration error on line " << line_number << std::endl;
                         return 0;
                     }
@@ -323,6 +377,9 @@ int main(){
                         inside_func.erase(0, 1);
                         inside_func.pop_back();
                         std::cout << inside_func;
+                    }
+                    else if (isMathExpression(inside_func)){
+                        std::cout << handleMath(inside_func);
                     } else {
                         // variable
                         std::string var_val = isVar(inside_func);
