@@ -252,7 +252,10 @@ double handleMath(const std::string& expr){
     return evaluateExpression(new_str);
 }
 
-
+std::string removeWhitespace(std::string str) {
+    str.erase(std::remove_if(str.begin(), str.end(), ::isspace), str.end());
+    return str;
+}
 
 int main(){
     std::ifstream file("main.txt");
@@ -262,19 +265,29 @@ int main(){
     std::string funcs[1] = {"print"};
     if (file.is_open()) {
         std::string line;
-        int line_number = 1;
+        int line_number = 0;
         while (getline(file, line)) {
+            line_number++;
             line = trim(line);
             // find variables if any in line
             std::vector<std::string> splitted_line = split(line, " ");
             int size = splitted_line.size();
-            int var_val = valueInArray(variable_types, sizeof(variable_types) / sizeof(variable_types[0]),splitted_line[0]);
-            if (var_val > -1){
+            int var_val = -1;
+            for(int o = 0; o < 4; o++){
+                if (splitted_line[0] == variable_types[o]){
+                    var_val = o;
+                    break;
+                }
+            }
+            if (var_val != -1){
                 if (splitted_line[2] != "="){
                     std::cout << "Variable type declared but value not declared with = on line " << line_number << std::endl;
                     return 0;
                 }
                 std::string variable_name = splitted_line[1];
+                if (isVar(variable_name) != "null"){
+                    std::cout << "Variable name already in use on line " << line_number << std::endl;
+                }
                 try {
                     std::stoi(variable_name);
                     std::cout << "Invalid variable name on line " << line_number << std::endl;
@@ -353,6 +366,62 @@ int main(){
                 }
                 continue;
             }
+            // check for existing variables
+            std::string exist_var = isVar(removeWhitespace(split(line, "=")[0]));
+            if(exist_var != "null"){
+                std::string variable_name = removeWhitespace(split(line, "=")[0]);
+                std::string joinedVarVal = joinVectorElements(splitted_line, 2, size);
+                if (exist_var == "int" || exist_var == "float" || exist_var == "long"){
+                    // number
+                    if(valueInString(joinedVarVal, '"')){
+                        std::cout << "Double quotes found in number declaration on line " << line_number << std::endl;
+                        return 0;
+                    }
+                    if(isMathExpression(joinedVarVal)){
+                        joinedVarVal = std::to_string(handleMath(joinedVarVal));
+                    }
+                    else if(size > 4){
+                        std::cout << "Number declaration error on line " << line_number << std::endl;
+                        return 0;
+                    }
+                    try {
+                        if (exist_var == "int"){
+                            // int
+                            int_vars[variable_name] = stoi(joinedVarVal);
+                        } else if (exist_var == "float"){
+                            //float
+                            float_vars[variable_name] = std::stof(joinedVarVal);
+                        } else if (exist_var == "long"){
+                            //long
+                            long_vars[variable_name] = std::stol(joinedVarVal);
+                        }
+                    } catch (const std::invalid_argument& e) {
+                        std::cerr << "Invalid Number argument on line " << line_number << std::endl;
+                        return 0;
+                    } catch (const std::out_of_range& e) {
+                        std::cerr << "Out of range Number argument on line " << line_number << std::endl;
+                        return 0;
+                    }
+                } else if(exist_var == "string"){
+                    // string
+                    std::string first_el = joinedVarVal;
+                    std::string last_el = splitted_line.back();
+                    if (first_el[0] != '"' || last_el[last_el.length() - 1] != '"'){
+                        std::cout << "Missing double-quotes on line " << line_number << std::endl;
+                        return 0;
+                    }
+                    std::string string_val = "";
+                    for(int i = 2; i < size; i++){
+                        string_val.append(splitted_line[i] + " ");
+                    }
+                    std::string new_string_val;
+                    for(size_t k = 1; k < string_val.length() - 2; k++){
+                        new_string_val += string_val[k];
+                    }
+                    string_vars[variable_name] = new_string_val;
+                }
+                continue;
+            }
             // check for functions
             std::vector<std::string> left_paren_split = split(line, "(");
             std::vector<std::string> right_paren_split = split(line, ")");
@@ -398,8 +467,8 @@ int main(){
                     }
                    }
                 }
+                continue;
             }
-            line_number++;
         }
         file.close();
     } else {
